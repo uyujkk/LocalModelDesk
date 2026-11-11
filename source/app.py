@@ -1,4 +1,4 @@
-"""Local Model Desk 0.9.0 — Python / PySide6 desktop shell."""
+"""Local Model Desk 0.9.1 — Python / PySide6 desktop shell."""
 from __future__ import annotations
 
 from i18n import set_language, tr
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from gpu_power import query_gpus, set_power_limit, watts_value
 from controller import Controller, CONTEXTS, DEFAULT_PROFILE, QUANTS, Profile, running_profile, loaded
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 APP_NAME = "Local Model Desk"
 ASSETS = Path(__file__).resolve().parent / "assets"
 

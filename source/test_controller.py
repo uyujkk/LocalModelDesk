@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from controller import Controller, ControlError, CONTEXT, MODEL, Profile, command_line, loaded, matches, sync_config
+from controller import Controller, ControlError, CONTEXT, CONTEXTS, MODEL, QUANTS, Profile, command_line, loaded, matches, sync_config
 
 
 class ControllerTests(unittest.TestCase):
@@ -119,6 +119,8 @@ class ControllerTests(unittest.TestCase):
             command_line(Path(r"E:\%TEMP%\strata.cmd"), ["launch"])
         with self.assertRaises(ControlError):
             command_line(Path(r"E:\strata.cmd"), ["launch & whoami"])
+        with self.assertRaises(ControlError):
+            command_line(Path(r"E:\strata.cmd"), ["launch", "--gpu-roles", "0=main,1=helper&whoami"])
 
     def test_strict_model_state(self):
         self.assertTrue(matches(self.health))
@@ -137,6 +139,18 @@ class ControllerTests(unittest.TestCase):
         self.assertIn("QWENDESK_CLI_OK", output)
         self.assertIn("modelscope", output)
         self.assertTrue(any("launch --preset qwen-dual12g-256k --yes" in line for line in output))
+        for quant in QUANTS:
+            for context in CONTEXTS:
+                profile = Profile(quant, context)
+                if profile.model == MODEL and context == CONTEXT:
+                    continue
+                with self.subTest(quant=quant, context=context):
+                    output.clear()
+                    Controller(root, output.append).plan(profile)
+                    command = next(line for line in output if line.startswith("launch "))
+                    self.assertIn('--gpu-roles "0=main,1=helper"', command)
+                    self.assertIn(f'--data-dir "{root / "models"}"', command)
+                    self.assertTrue(command.endswith("--plan"))
 
     def test_close_with_no_process_does_not_kill_and_can_stop_after(self):
         c = Controller(self.root)

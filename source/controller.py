@@ -24,6 +24,7 @@ import psutil
 MODEL = "qwen3.8-flash-next-iq2_xs"
 PRESET = "qwen-dual12g-256k"
 CONTEXT = 262144
+DUAL_GPU_ROLES = "0=main,1=helper"
 
 @dataclass(frozen=True)
 class Profile:
@@ -61,7 +62,7 @@ class Profile:
         if self == DEFAULT_PROFILE:
             return ["launch", "--preset", self.preset]
         return ["launch", "--family", "qwen", "--model", self.quant.lower(),
-                "--context", self.context_name.lower(), "--gpu-roles", "0=main,1=helper",
+                "--context", self.context_name.lower(), "--gpu-roles", DUAL_GPU_ROLES,
                 "--split-engine", "off", "--parallel", "1", "--kv", "int8",
                 "--vision", "off", "--drafting", "off", "--tune", "skip", "--access", "local",
                 "--port", "8080", "--data-dir", str(data_dir), "--save-preset", self.preset]
@@ -150,6 +151,8 @@ def command_line(script: Path, args: list[str]) -> str:
         if index and args[index - 1] == "--data-dir":
             if not Path(arg).is_absolute() or any(c in arg for c in '"%\r\n'):
                 raise ControlError(tr('无效的模型数据目录。'))
+            quoted.append(f'"{arg}"')
+        elif index and args[index - 1] == "--gpu-roles" and arg == DUAL_GPU_ROLES:
             quoted.append(f'"{arg}"')
         elif arg and all(c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.=" for c in arg):
             quoted.append(arg)

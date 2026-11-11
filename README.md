@@ -4,7 +4,9 @@
 
 Local Model Desk is a Windows launcher for dual-GPU Qwen3.8-Flash-Next on Strata. It starts and unloads models, keeps the selected OpenCode model and context in sync, embeds Strata telemetry, and provides per-card NVIDIA power controls.
 
-![GPU Power page with simulated readings for two NVIDIA cards](docs/gpu-power.png)
+![Local Model Desk workbench with IQ3_XXS, 128K context, and CPU image input](docs/workbench.png)
+
+*Workbench shown with a simulated local service.*
 
 ## Install and start
 
@@ -38,6 +40,26 @@ The **Monitor** page shows prompt progress, output rate, GPU usage, and recent r
 - Check **Logs** for download and startup errors. On the same PC, query `http://127.0.0.1:8080/health` to check `model`, `max_context`, `loaded` and `images`.
 - A vision setup can reuse the existing text weights. If the image state is off after launch, check the Strata log for the vision encoder.
 - For power changes, check the driver's reported range and the administrator prompt. Driver and hardware support vary.
+
+## Screenshots
+
+### Embedded Strata monitor
+
+Prompt progress, recent requests, and dual-GPU telemetry. The readings shown are simulated.
+
+![Embedded Strata dashboard with simulated dual-GPU telemetry and prompt progress](docs/strata-monitor.png)
+
+### GPU power limits
+
+Per-card power draw, allowed limits, and restore controls. The readings shown are simulated.
+
+![GPU Power page with simulated readings for two NVIDIA cards](docs/gpu-power.png)
+
+### Settings
+
+Strata installation path, appearance, and interface language.
+
+![Settings page in dark mode](docs/settings.png)
 
 ## Build and test from source
 

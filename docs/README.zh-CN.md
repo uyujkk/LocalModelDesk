@@ -4,7 +4,9 @@
 
 Local Model Desk 是 Windows 上的本地模型启动器。它管理 Strata 上的双卡 Qwen3.8-Flash-Next，打开 OpenCode，同步模型、上下文和图片输入能力。模型监控与 NVIDIA 功耗设置都在应用内完成。
 
-![双卡功耗页，截图为模拟数据](gpu-power.png)
+![工作台显示 IQ3_XXS、128K 上下文和 CPU 图片输入](workbench.png)
+
+*截图中的模型服务状态为模拟数据。*
 
 ## 下载与安装
 
@@ -80,6 +82,26 @@ Get-FileHash -Algorithm SHA256 -LiteralPath '.\LocalModelDesk-v0.9.1-win-x64.zip
 Invoke-RestMethod 'http://127.0.0.1:8080/health' |
     Select-Object model, max_context, loaded, images
 ```
+
+## 界面截图
+
+### 内嵌 Strata 监控
+
+显示提示词读取进度、最近请求和双卡运行状态。截图中的读数为模拟数据。
+
+![内嵌 Strata 监控，显示模拟的双卡读数和提示词进度](strata-monitor.png)
+
+### 双卡功耗
+
+每张卡分别显示当前功耗、可设上限与恢复按钮。截图中的读数为模拟数据。
+
+![双卡功耗页，截图为模拟数据](gpu-power.png)
+
+### 设置
+
+Strata 部署目录、主题和界面语言。
+
+![深色主题设置页](settings.png)
 
 ## 从源码运行与构建
 

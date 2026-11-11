@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+build/
+dist/
+validation/
+*-error.txt
+*.log
+settings.json
+*.zip
+*.gguf
+*.safetensors

@@ -112,6 +112,39 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual((limit["context"], limit["input"], limit["output"]), (65536, 57344, 8192))
         self.assertEqual(cfg["compaction"]["reserved"], 4096)
 
+    def test_picture_toggle_restarts_same_model_and_syncs_open_code(self):
+        text = Profile("IQ3_XXS", 131072)
+        picture = Profile("IQ3_XXS", 131072, True)
+        c = Controller(self.root)
+        health = dict(self.health, model=text.model, max_context=text.context, images=False)
+        self.assertEqual(text.preset, picture.preset)
+        for before, after in ((text, picture), (picture, text)):
+            with self.subTest(images=after.images), \
+                    patch.object(c, "health", side_effect=[dict(health, images=before.images),
+                        dict(health, images=before.images), None, dict(health, images=after.images)]), \
+                    patch.object(c, "run_cli") as cli, patch.object(c, "close", return_value={}), \
+                    patch.object(c, "desktop_processes", return_value=[object()]):
+                c.start(after)
+                plan, stop, launch = [call.args[0] for call in cli.call_args_list]
+                self.assertEqual(plan[-1], "--plan")
+                self.assertEqual(stop[-1], text.preset)
+                self.assertEqual(launch[launch.index("--vision") + 1], "cpu" if after.images else "off")
+                model = json.loads(self.config.read_text(encoding="utf-8"))["provider"]["strata"]["models"][text.model]
+                self.assertEqual(model["attachment"], after.images)
+                self.assertEqual(model["modalities"]["input"], ["text", "image"] if after.images else ["text"])
+                self.assertEqual(model["limit"]["context"], 131072)
+
+    def test_strata_image_state_mismatch_does_not_change_open_code(self):
+        picture = Profile("IQ3_XXS", 131072, True)
+        c = Controller(self.root)
+        wrong = dict(self.health, model=picture.model, max_context=picture.context, images=False)
+        original = self.config.read_bytes()
+        with patch.object(c, "health", side_effect=[None, wrong]), patch.object(c, "run_cli"), \
+                patch.object(c, "desktop_processes", return_value=[]):
+            with self.assertRaisesRegex(ControlError, "图片输入状态"):
+                c.start(picture)
+        self.assertEqual(self.config.read_bytes(), original)
+
     def test_command_quotes_paths_and_rejects_interpolation(self):
         command = command_line(Path(r"E:\模型 文件\strata.cmd"), ["launch", "--yes"])
         self.assertIn('"E:\\模型 文件\\strata.cmd" launch --yes', command)

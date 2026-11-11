@@ -1,4 +1,4 @@
-"""Local Model Desk 0.8.1 — Python / PySide6 desktop shell."""
+"""Local Model Desk 0.9.0 — Python / PySide6 desktop shell."""
 from __future__ import annotations
 
 from i18n import set_language, tr
@@ -16,7 +16,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, QLocale, Sig
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap, QPalette
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame,
     QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPlainTextEdit, QProgressBar,
     QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget,
 )
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from gpu_power import query_gpus, set_power_limit, watts_value
 from controller import Controller, CONTEXTS, DEFAULT_PROFILE, QUANTS, Profile, running_profile, loaded
 
-VERSION = "0.8.1"
+VERSION = "0.9.0"
 APP_NAME = "Local Model Desk"
 ASSETS = Path(__file__).resolve().parent / "assets"
 
@@ -159,7 +159,7 @@ class Window(QMainWindow):
     def save_settings(self):
         self.settings.update(root=self.root.text().strip(), theme=self.theme.currentData())
         profile = self.selected_profile()
-        self.settings["profile"] = {"quant": profile.quant, "context": profile.context}
+        self.settings["profile"] = {"quant": profile.quant, "context": profile.context, "images": profile.images}
         try:
             self.state_dir.mkdir(parents=True, exist_ok=True)
             (self.state_dir / "settings.json").write_text(json.dumps(self.settings, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -286,13 +286,17 @@ class Window(QMainWindow):
         options.addWidget(label(tr('上下文'), "muted"))
         options.addWidget(self.context_pick, 1)
         model.box.addLayout(options)
+        self.images_pick = QCheckBox(tr("启用图片输入（CPU）"))
+        self.images_pick.setToolTip(tr("首次启用可能需要下载约 0.9 GB 的视觉编码器。"))
+        model.box.addWidget(self.images_pick)
         saved = self.settings.get("profile")
         saved = saved if isinstance(saved, dict) else {}
         quant, context = saved.get("quant"), saved.get("context")
-        profile = Profile(quant, context) if quant in QUANTS and context in CONTEXTS else DEFAULT_PROFILE
+        profile = Profile(quant, context, saved.get("images") is True) if quant in QUANTS and context in CONTEXTS else DEFAULT_PROFILE
         self.apply_profile(profile)
         self.quant.currentIndexChanged.connect(self.quant_changed)
         self.context_pick.currentIndexChanged.connect(self.profile_changed)
+        self.images_pick.toggled.connect(self.profile_changed)
         model.box.addSpacing(7)
         stats = QHBoxLayout()
         self.context_label = label(tr('上下文预设'), "muted")
@@ -726,7 +730,7 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
         self.busy = busy
         for control in [self.start_button, self.close_button, self.unload_button, self.all_button,
                         self.root, self.browse_button, self.save_button,
-                        self.quant, self.context_pick, self.plan_button]:
+                        self.quant, self.context_pick, self.images_pick, self.plan_button]:
             control.setEnabled(not busy)
         self.refresh_button.setEnabled(not busy and not self.checking)
         self.progress.setVisible(busy)
@@ -786,6 +790,7 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
             detail = tr('启动 {0} / {1}。首次启动可能下载模型。', profile.quant, profile.context_name)
             if active:
                 detail = tr('从 {0} / {1} 切换到 {2} / {3}。请先保存正在运行的任务。', active.quant, active.context_name, profile.quant, profile.context_name)
+            detail += " " + tr("图片输入将开启（CPU）。" if profile.images else "图片输入将关闭。")
             if profile.quant == "IQ3_XXS" and profile.context == 262144:
                 detail += tr(' 64GB 内存运行此档可能出现换页、减速或加载失败。')
             if not self.confirm(tr('启动所选配置'), detail, tr('继续')):
@@ -845,6 +850,8 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
         self.active_model.setText(tr('当前运行：{0} / {1}', active.quant, active.context_name) if ready else
                                   tr('当前服务：{0} / {1}（已卸载）', active.quant, active.context_name) if active else
                                   tr('当前服务为其他配置') if health else tr('当前服务未连接'))
+        if active:
+            self.active_model.setText(self.active_model.text() + " · " + tr("图片已开启" if active.images else "图片已关闭"))
         self.context_label.setText(tr('所选上下文'))
         self.context_value.setText(profile.context_name)
         self.threshold_value.setText(tr('{0}K（默认）', (profile.input - profile.reserved) // 1024))
@@ -871,18 +878,21 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
         return self.threshold_value
 
     def selected_profile(self):
-        return Profile(self.quant.currentText(), self.context_pick.currentData())
+        return Profile(self.quant.currentText(), self.context_pick.currentData(), self.images_pick.isChecked())
 
     def apply_profile(self, profile):
         self.quant.blockSignals(True)
         self.context_pick.blockSignals(True)
+        self.images_pick.blockSignals(True)
         self.quant.setCurrentText(profile.quant)
         self.context_pick.setCurrentIndex(self.context_pick.findData(profile.context))
+        self.images_pick.setChecked(profile.images)
+        self.images_pick.blockSignals(False)
         self.context_pick.blockSignals(False)
         self.quant.blockSignals(False)
 
     def quant_changed(self):
-        self.apply_profile(Profile(self.quant.currentText(), 65536 if self.quant.currentText() == "IQ3_XXS" else 262144))
+        self.apply_profile(Profile(self.quant.currentText(), 65536 if self.quant.currentText() == "IQ3_XXS" else 262144, self.images_pick.isChecked()))
         self.profile_changed()
 
     def profile_changed(self):

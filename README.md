@@ -17,6 +17,12 @@ Local Model Desk 是用于管理本地 Strata 模型服务和 OpenCode 的 Windo
 - Choose English, Simplified Chinese, or the system language under Settings.
   在设置中选择英文、简体中文或跟随系统，保存后重新打开应用。
 
+## Image input / 图片输入
+
+Enable **Image input (CPU)** on the Home page, run **Check download**, then start or switch the model. The first run may fetch an additional ~0.9 GB vision encoder. Local Model Desk checks Strata's reported capability and updates the matching OpenCode model entry. Open a new chat and attach an image.
+
+在工作台勾选 **启用图片输入（CPU）**，先做 **下载预检**，再启动或切换模型。首次启用可能下载约 0.9 GB 的视觉编码器。工作台确认 Strata 报告图片输入状态后会同步 OpenCode 对应的模型配置。打开新会话即可测试图片附件。
+
 ## Requirements / 运行条件
 
 - Windows 11 x64 and Python 3.12 for running from source.

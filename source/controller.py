@@ -30,6 +30,7 @@ DUAL_GPU_ROLES = "0=main,1=helper"
 class Profile:
     quant: str
     context: int
+    images: bool = False
 
     @property
     def model(self):
@@ -60,11 +61,11 @@ class Profile:
 
     def launch_args(self, data_dir: Path):
         if self == DEFAULT_PROFILE:
-            return ["launch", "--preset", self.preset]
+            return ["launch", "--preset", self.preset, "--vision", "off"]
         return ["launch", "--family", "qwen", "--model", self.quant.lower(),
                 "--context", self.context_name.lower(), "--gpu-roles", DUAL_GPU_ROLES,
                 "--split-engine", "off", "--parallel", "1", "--kv", "int8",
-                "--vision", "off", "--drafting", "off", "--tune", "skip", "--access", "local",
+                "--vision", "cpu" if self.images else "off", "--drafting", "off", "--tune", "skip", "--access", "local",
                 "--port", "8080", "--data-dir", str(data_dir), "--save-preset", self.preset]
 
 
@@ -77,11 +78,15 @@ class ControlError(RuntimeError):
     pass
 
 
-def matches(health: dict | None, profile=DEFAULT_PROFILE) -> bool:
+def active_model_context(health: dict | None, profile: Profile) -> bool:
     return bool(health and health.get("service") == "strata"
                 and health.get("model") == profile.model
                 and type(health.get("max_context")) is int
                 and health["max_context"] == profile.context)
+
+
+def matches(health: dict | None, profile=DEFAULT_PROFILE) -> bool:
+    return active_model_context(health, profile) and (health.get("images") is True) == profile.images
 
 
 def running_profile(health):
@@ -89,7 +94,7 @@ def running_profile(health):
         return None
     for quant in QUANTS:
         for context in CONTEXTS:
-            profile = Profile(quant, context)
+            profile = Profile(quant, context, health.get("images") is True)
             if matches(health, profile):
                 return profile
     return None
@@ -100,7 +105,7 @@ def loaded(health: dict | None) -> bool:
 
 
 def sync_config(path: Path, profile=DEFAULT_PROFILE, *, apply=True) -> bool:
-    """Update only model selection/limits; preserve unrelated config and permissions."""
+    """Update the selected model, limits, and image capability; preserve unrelated config and permissions."""
     original = path.read_text(encoding="utf-8-sig")
     config = json.loads(original)
     try:
@@ -118,8 +123,19 @@ def sync_config(path: Path, profile=DEFAULT_PROFILE, *, apply=True) -> bool:
     if profile.model not in models:
         models[profile.model] = deepcopy(template)
         models[profile.model]["name"] = f"Qwen3.8-Flash-Next {profile.quant} via Strata"
-    models[profile.model].setdefault("limit", {}).update(
-        context=profile.context, input=profile.input, output=profile.output)
+    model = models[profile.model]
+    model.setdefault("limit", {}).update(context=profile.context, input=profile.input, output=profile.output)
+    modalities = model.get("modalities", {})
+    inputs = modalities.get("input", ["text"])
+    if profile.images:
+        model.setdefault("modalities", {}).update(input=list(dict.fromkeys([*inputs, "text", "image"])))
+        model["modalities"].setdefault("output", ["text"])
+        model["attachment"] = True
+    elif "image" in inputs:
+        remaining = [value for value in inputs if value != "image"]
+        modalities["input"] = list(dict.fromkeys([*remaining, "text"]))
+        if not any(value != "text" for value in remaining):
+            model["attachment"] = False
     config.update(model=selected, small_model=selected)
     compaction = config.setdefault("compaction", {})
     compaction.pop("buffer", None)
@@ -294,6 +310,8 @@ class Controller:
                 health = self.health()
                 if matches(health, profile) and loaded(health):
                     break
+                if loaded(health) and active_model_context(health, profile):
+                    raise ControlError(tr('模型已加载，但 Strata 报告的图片输入状态与所选配置不同。请检查启动日志。'))
                 if time.monotonic() > deadline:
                     raise ControlError(tr('10 分钟内模型未报告就绪，请检查 Strata 引擎日志。'))
                 time.sleep(3)

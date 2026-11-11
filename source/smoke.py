@@ -33,6 +33,14 @@ def run(app, output: Path) -> int:
     assert "208K" in window.threshold_value.text()
     assert "内存上限" in window.model_hint.text()
     assert "切换" in window.start_button.text()
+    window.images_pick.setChecked(True)
+    assert window.selected_profile().images
+    assert "图片已关闭" in window.active_model.text()
+    selected = window.selected_profile()
+    window.render_status({"health": {"service": "strata", "model": selected.model,
+        "max_context": selected.context, "loaded": True, "images": True}, "desktop_count": 0})
+    assert "图片已开启" in window.active_model.text()
+    assert not "切换" in window.start_button.text()
     app.processEvents()
     window.grab().save(str(output / "QwenDesk-model-switch.png"))
     window.theme.setCurrentIndex(window.theme.findData("dark"))

@@ -13,6 +13,13 @@ def tr(key, *args):
 
 
 ENGLISH = {
+    "启用图片输入（CPU）": "Enable image input (CPU)",
+    "首次启用可能需要下载约 0.9 GB 的视觉编码器。": "The first use may download a vision encoder of about 0.9 GB.",
+    "图片输入将开启（CPU）。": "Image input will be enabled (CPU).",
+    "图片输入将关闭。": "Image input will be disabled.",
+    "图片已开启": "Images enabled",
+    "图片已关闭": "Images disabled",
+    "模型已加载，但 Strata 报告的图片输入状态与所选配置不同。请检查启动日志。": "The model loaded, but Strata reported a different image input state. Check the launch log.",
     "界面语言": "Interface language",
     "保存后重新打开应用，语言设置即可生效。": "Reopen the app after saving to apply the language.",
     "保存语言": "Save language",

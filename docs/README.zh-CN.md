@@ -43,7 +43,7 @@ OpenCode Desktop 2.2.6 及以上由 Local Model Desk 直接打开，并使用 `a
 ### 校验下载
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\LocalModelDesk-OpenCode2-win-x64.zip'
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\LocalModelDesk-v0.9.2-win-x64.zip'
 ```
 
 将输出的哈希与同名的 `.sha256` 文件比对。

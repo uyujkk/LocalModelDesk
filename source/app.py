@@ -157,7 +157,8 @@ class Window(QMainWindow):
         return {"root": r"E:\Strata-Qwen-Test", "theme": "system"}
 
     def save_settings(self):
-        self.settings.update(root=self.root.text().strip(), theme=self.theme.currentData())
+        self.settings.update(root=self.root.text().strip(), theme=self.theme.currentData(),
+                             opencode_exe=self.opencode_exe.text().strip())
         profile = self.selected_profile()
         self.settings["profile"] = {"quant": profile.quant, "context": profile.context, "images": profile.images}
         try:
@@ -418,6 +419,17 @@ class Window(QMainWindow):
         line.addWidget(self.root, 1)
         line.addWidget(self.browse_button)
         install.box.addLayout(line)
+        install.box.addWidget(label(tr("OpenCode Desktop 程序"), "cardTitle"))
+        desktop_row = QHBoxLayout()
+        self.opencode_exe = QLineEdit(str(self.settings.get("opencode_exe", "")))
+        self.opencode_exe.setPlaceholderText(tr("留空自动查找已安装的 OpenCode"))
+        self.opencode_exe.setAccessibleName(tr("OpenCode Desktop 程序"))
+        self.opencode_exe.setMinimumHeight(40)
+        self.browse_opencode_button = button(tr("浏览…"))
+        self.browse_opencode_button.clicked.connect(self.browse_opencode)
+        desktop_row.addWidget(self.opencode_exe, 1)
+        desktop_row.addWidget(self.browse_opencode_button)
+        install.box.addLayout(desktop_row)
         self.save_button = button(tr('保存安装位置'), "primary")
         self.save_button.clicked.connect(self.save_root)
         install.box.addWidget(self.save_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -684,6 +696,16 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
         if selected:
             self.root.setText(selected)
 
+    def browse_opencode(self):
+        selected, _ = QFileDialog.getOpenFileName(self, tr("选择 OpenCode Desktop 程序"),
+                                                  self.opencode_exe.text() or self.root.text(), "OpenCode (*.exe)")
+        if selected:
+            self.opencode_exe.setText(selected)
+
+    def selected_desktop(self):
+        path = self.opencode_exe.text().strip()
+        return Path(path) if path else None
+
     def save_root(self):
         self.save_settings()
         self.log(tr('安装位置已保存：') + self.root.text().strip())
@@ -729,13 +751,13 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
     def set_busy(self, busy: bool):
         self.busy = busy
         for control in [self.start_button, self.close_button, self.unload_button, self.all_button,
-                        self.root, self.browse_button, self.save_button,
+                        self.root, self.browse_button, self.save_button, self.opencode_exe, self.browse_opencode_button,
                         self.quant, self.context_pick, self.images_pick, self.plan_button]:
             control.setEnabled(not busy)
         self.refresh_button.setEnabled(not busy and not self.checking)
         self.progress.setVisible(busy)
 
-    def operation(self, operation: str, force: bool = False):
+    def operation(self, operation: str, force: bool = False, restart_service: bool = False):
         if self.busy:
             return
         root = Path(self.root.text().strip())
@@ -744,13 +766,14 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
             return
         self.set_busy(True)
         profile = self.selected_profile()
+        desktop_exe = self.selected_desktop()
         if operation == "plan":
             self.navigate(2)
         self.notice.setText(tr('正在执行，请稍候。详细输出可在运行日志中查看。'))
         def execute(emit):
-            controller = Controller(root, emit)
+            controller = Controller(root, emit, desktop_exe=desktop_exe)
             if operation == "start":
-                return controller.start(profile, force=force)
+                return controller.start(profile, force=force, restart_service=restart_service)
             if operation == "plan":
                 return controller.plan(profile)
             if operation == "unload":
@@ -759,16 +782,23 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
         task = Task(execute)
         self.tasks.add(task)
         task.signals.log.connect(self.log)
-        task.signals.result.connect(lambda result: self.operation_done(task, result, operation))
+        task.signals.result.connect(lambda result: self.operation_done(task, result, operation, restart_service))
         task.signals.error.connect(lambda error: self.operation_error(task, error))
         self.pool.start(task)
 
-    def operation_done(self, task, result, operation):
+    def operation_done(self, task, result, operation, restart_service=False):
         self.tasks.discard(task)
         self.set_busy(False)
-        if result.get("needs_force"):
+        if result.get("needs_service_restart"):
+            if self.confirm(tr("重启 OpenCode 后台服务"),
+                            tr("当前后台服务由其他配置启动。请先保存工作并结束运行中的任务，再切换到 Local Model Desk 的配置。"),
+                            tr("重启并继续")):
+                self.operation(operation, restart_service=True)
+            else:
+                self.log(tr("已取消切换 OpenCode 后台服务。"))
+        elif result.get("needs_force"):
             if self.confirm(tr('OpenCode 仍在运行'), tr('它可能已经最小化到托盘。是否强制退出此安装的 OpenCode？未完成的任务可能中断。'), tr('强制退出')):
-                self.operation(operation, force=True)
+                self.operation(operation, force=True, restart_service=restart_service)
             else:
                 self.log(tr('已取消强制退出。没有继续卸载模型。') if operation == "all" else tr('已取消强制退出。'))
         else:
@@ -815,7 +845,8 @@ QToolTip { background:CARD; color:FG; border:1px solid BORDER; padding:6px; }
         self.checking = True
         self.refresh_button.setEnabled(False)
         root = Path(self.root.text().strip())
-        task = Task(lambda _: Controller(root).status())
+        desktop_exe = self.selected_desktop()
+        task = Task(lambda _: Controller(root, desktop_exe=desktop_exe).status())
         self.tasks.add(task)
         task.signals.result.connect(lambda result: self.status_done(task, result))
         task.signals.error.connect(lambda error: self.status_error(task, error))

@@ -10,11 +10,17 @@ Local Model Desk is a Windows launcher for dual-GPU Qwen3.8-Flash-Next on Strata
 
 ## Install and start
 
-1. Download the Windows x64 portable ZIP from Releases and check it against the accompanying SHA-256 file. GitHub's **Source code** links contain repository snapshots.
+1. Use the Windows x64 portable ZIP for this build and check it against the accompanying SHA-256 file. GitHub's **Source code** links contain repository snapshots.
 2. Extract the entire archive and run `LocalModelDesk.exe`. Keep its `_internal` directory alongside the executable. The ZIP includes the launcher's runtime, source, and documentation.
-3. In **Settings**, select the existing Strata deployment root. The launcher targets `terminal/0.1.57/bin/strata.cmd`, the model data folder `models/`, and the OpenCode files `agent/Start-Qwen-Desktop.cmd`, `agent/desktop/OpenCode.exe` and `agent/config/opencode/opencode.json`. Strata, OpenCode, drivers and model weights are installed separately. The existing OpenCode launcher must read the listed configuration file.
+3. In **Settings**, select the existing Strata deployment root. The launcher targets `terminal/0.1.57/bin/strata.cmd` and the model data folder `models/`. It finds OpenCode Desktop in the deployment or in the Windows installation. Enter the exact executable in Settings to override discovery. Strata, OpenCode, drivers and model weights are installed separately.
 4. Choose IQ2_XS or IQ3_XXS and a 32K–256K context. **Check download** previews downloads and resource guidance. **Start model and open OpenCode** starts the local service and backs up the OpenCode configuration before updating it. GPU 0 is the main card and GPU 1 is the helper.
 5. To upgrade, close the old launcher and extract the new ZIP into a separate folder. Local Model Desk keeps its preferences in `%LOCALAPPDATA%\QwenDesk\Python\settings.json`. Save the interface language in **Settings** and reopen the app to apply it.
+
+## OpenCode Desktop 2
+
+OpenCode Desktop 2.2.6 or later uses a separate configuration and session directory under `agent/opencode-v2/`. Local Model Desk opens the installed desktop directly, configures the selected Strata model, and loads its bundled `strata-charts` GUI plugin. If an OpenCode background service is already using another configuration, finish its active tasks and accept the restart prompt. On OpenCode 1.x the existing deployment launcher and configuration are still used.
+
+Ask for an interactive chart in chat. The plugin renders a completed `strata-chart` block as a bar chart with a switch for each supplied metric. For example, ask it to chart two sample decode rates and VRAM values in `strata-chart` format. The plugin can be inspected under **Settings → Extensions → Plugins** in OpenCode Desktop.
 
 ## Context budgets
 

@@ -10,9 +10,9 @@ Local Model Desk 是 Windows 上的本地模型启动器。它管理 Strata 上�
 
 ## 下载与安装
 
-1. 从 [GitHub Releases](https://github.com/uyujkk/LocalModelDesk/releases/latest) 下载 `LocalModelDesk-v…-win-x64.zip`。GitHub 的 **Source code** 是源码快照。
+1. 使用本次构建提供的 Windows x64 便携 ZIP，并核对随包的 SHA-256 文件。GitHub 的 **Source code** 是源码快照。
 2. 完整解压到独立目录。打开 `LocalModelDesk.exe`，保留同目录的 `_internal`。便携包自带应用的 Python 和 Qt 运行依赖。
-3. 进入 **设置 → Strata 安装位置**，选择已有部署根目录，保存设置。该根目录包含 Strata Terminal、模型和 OpenCode 配置。
+3. 进入 **设置 → Strata 安装位置**，选择已有部署根目录并保存。OpenCode Desktop 程序留空时自动查找已有安装。找不到或选错时，在同一页选择实际的 `OpenCode.exe`。
 4. 在 **工作台** 选择量化和上下文，点 **下载预检**。确认磁盘空间和待下载量后，点 **启动模型并打开 OpenCode**。
 
 完整便携包包含启动器、依赖、启动器源码和说明。Strata、OpenCode、NVIDIA 驱动和模型权重由各自的安装来源提供。初次部署请先安装 [Strata Terminal](https://github.com/Niko1221/Strata/blob/main/docs/INSTALL.md) 和 [OpenCode](https://opencode.ai/docs/)。目前启动器对接下面的便携部署结构。
@@ -24,20 +24,29 @@ Local Model Desk 是 Windows 上的本地模型启动器。它管理 Strata 上�
 ├── offline-feed/                        # 使用本地更新源时
 ├── models/                              # Strata 模型数据目录
 └── agent/
-    ├── Start-Qwen-Desktop.cmd            # 现有 OpenCode Desktop 启动脚本
-    ├── desktop/OpenCode.exe
-    └── config/opencode/opencode.json    # 启动脚本实际读取的配置
+    ├── Start-Qwen-Desktop.cmd            # OpenCode 1.x 的旧启动入口
+    ├── desktop/OpenCode.exe             # OpenCode 也可以通过官方安装器装到别处
+    ├── config/opencode/opencode.json    # OpenCode 1.x 的配置
+    └── opencode-v2/                      # 启动 OpenCode 2 后创建
 ```
 
-启动器固定连接本机 `http://127.0.0.1:8080`。OpenCode 的 Strata provider 应使用 `http://127.0.0.1:8080/v1`，并在 `provider.strata.models` 中已有一个支持的 Qwen 模型条目供启动器更新。现有部署可以直接选择原根目录。常规升级只需退出旧版，再解压并打开新版。应用沿用 `%LOCALAPPDATA%\QwenDesk\Python\settings.json`，可在设置里保存中文、英文或跟随系统，重新打开后生效。
+启动器连接本机 `http://127.0.0.1:8080`。常规升级只需退出旧版，再解压并打开新版。应用沿用 `%LOCALAPPDATA%\QwenDesk\Python\settings.json`，可在设置里保存中文、英文或跟随系统，重新打开后生效。
+
+### 使用 OpenCode Desktop 2
+
+OpenCode Desktop 2.2.6 及以上由 Local Model Desk 直接打开，并使用 `agent/opencode-v2/` 中单独的配置和会话数据。旧版 OpenCode 的配置和会话仍在原目录。首次启动若提示后台服务使用另一份配置，请先保存工作并结束运行中的任务，再点 **重启并继续**。
+
+新版会加载随包提供的 `strata-charts`。在 OpenCode 的 **Settings → Extensions → Plugins** 可检查插件。可用下列提示验证图表会在回复中显示并支持切换指标。
+
+> 用 `strata-chart` 格式画一张交互图。IQ2_XS 是 24 tok/s、15 GiB，IQ3_XXS 是 18 tok/s、19 GiB。这些是示例数据，提供解码速度和显存两个切换指标。
 
 ### 校验下载
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\LocalModelDesk-v0.9.1-win-x64.zip'
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\LocalModelDesk-OpenCode2-win-x64.zip'
 ```
 
-将输出的哈希与同一 Release 的 `.sha256` 文件比对。
+将输出的哈希与同名的 `.sha256` 文件比对。
 
 ## 模型与上下文
 

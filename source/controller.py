@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from i18n import tr
+from opencode_desktop import OpenCodeV2, background_service, find_desktop
 
 import ctypes
 from copy import deepcopy
@@ -180,11 +181,13 @@ def command_line(script: Path, args: list[str]) -> str:
 
 class Controller:
     def __init__(self, root: Path, emit: Callable[[str], None] = lambda _: None,
-                 url: str = "http://127.0.0.1:8080"):
+                 url: str = "http://127.0.0.1:8080", desktop_exe: Path | None = None):
         self.root = Path(root)
         self.emit = emit
         self.url = url.rstrip("/")
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self.desktop_exe = desktop_exe
+        self.desktop = find_desktop(self.agent, desktop_exe)
 
     @property
     def agent(self) -> Path:
@@ -211,11 +214,14 @@ class Controller:
             raise ControlError(tr('8080 接口返回了无法解析的状态，未操作该服务。')) from exc
 
     def desktop_processes(self) -> list[psutil.Process]:
-        expected = os.path.normcase(os.path.abspath(self.agent / "desktop" / "OpenCode.exe"))
+        if self.desktop_exe is not None and self.desktop is None:
+            return []
+        exe = self.desktop.exe if self.desktop else self.agent / "desktop" / "OpenCode.exe"
+        expected = os.path.normcase(os.path.abspath(exe))
         found = []
         for process in psutil.process_iter(["name", "exe"]):
             try:
-                if (process.info["name"] or "").lower() != "opencode.exe":
+                if (process.info["name"] or "").casefold() != exe.name.casefold():
                     continue
                 if os.path.normcase(os.path.abspath(process.info["exe"] or "")) == expected:
                     found.append(process)
@@ -283,23 +289,38 @@ class Controller:
             time.sleep(1)
         raise ControlError(tr('停止命令结束，但服务仍在响应。请检查引擎日志。'))
 
-    def start(self, profile=DEFAULT_PROFILE, force=False) -> dict:
+    def start(self, profile=DEFAULT_PROFILE, force=False, restart_service=False) -> dict:
         launcher = self.agent / "Start-Qwen-Desktop.cmd"
         config = self.agent / "config" / "opencode" / "opencode.json"
-        if not launcher.is_file() or not config.is_file():
+        if self.desktop_exe is not None and self.desktop is None:
+            raise ControlError(tr("所选 OpenCode Desktop 程序不可用，请在设置中检查路径。"))
+        v2 = OpenCodeV2(self.desktop, self.agent, self.url) if self.desktop and self.desktop.v2 else None
+        if v2:
+            v2.validate()
+        elif not launcher.is_file() or not config.is_file():
             raise ControlError(tr('找不到现有 OpenCode 启动器或配置，请在设置中检查安装位置。'))
+        elif self.desktop_exe is not None and self.desktop.exe != (self.agent / "desktop" / "OpenCode.exe").resolve():
+            raise ControlError(tr("OpenCode 1.x 仍需通过 Strata 安装目录中的旧启动器运行。"))
+
+        service = background_service() if v2 else None
+        change_service = service is not None and not v2.owns(service)
+        if change_service and not restart_service:
+            return {"needs_service_restart": True}
+
         health = self.health()
         active = running_profile(health)
         if health is not None and active is None:
             raise ControlError(tr('8080 端口已有其他模型或上下文配置，请先自行停止。'))
         ready = matches(health, profile) and loaded(health)
-        needs_sync = sync_config(config, profile, apply=False)
+        needs_sync = v2.sync(profile, apply=False) if v2 else sync_config(config, profile, apply=False)
         if not ready and not matches(health, profile) and (health is not None or profile != DEFAULT_PROFILE):
             self.plan(profile)
-        if (not ready or needs_sync) and self.desktop_processes():
+        if (not ready or needs_sync or change_service) and self.desktop_processes():
             result = self.close(force=force)
             if result.get("needs_force"):
                 return result
+        if change_service:
+            v2.stop_service(service)
         if not ready:
             if health is not None:
                 self.stop(expected=active)
@@ -317,10 +338,16 @@ class Controller:
                 time.sleep(3)
         else:
             self.emit(tr('模型已经就绪，复用当前服务。'))
-        changed = sync_config(config, profile)
+        changed = v2.sync(profile) if v2 else sync_config(config, profile)
         self.emit(tr('已同步 OpenCode {0} / {1} 并备份原配置。', profile.quant, profile.context_name) if changed else tr('OpenCode 已使用对应的模型与上下文。'))
         if self.desktop_processes():
+            if v2:
+                return self.wait_v2(v2, profile)
             return {"message": tr('OpenCode 已在运行。') + (tr('上下文配置已更新，请退出后重新打开。') if changed else "")}
+        if v2:
+            self.emit(tr("正在启动 OpenCode {0}：{1}", ".".join(map(str, v2.desktop.version)), v2.desktop.exe))
+            v2.launch()
+            return self.wait_v2(v2, profile)
         subprocess.Popen(command_line(launcher, []), cwd=self.agent, stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          creationflags=subprocess.CREATE_NO_WINDOW)
@@ -329,6 +356,16 @@ class Controller:
                 return {"message": tr('Qwen 已就绪，OpenCode 已启动。')}
             time.sleep(0.5)
         raise ControlError(tr('模型已就绪，但 15 秒内未检测到 OpenCode 进程。请检查桌面启动器。'))
+
+    def wait_v2(self, desktop: OpenCodeV2, profile: Profile) -> dict:
+        deadline = time.monotonic() + 35
+        while time.monotonic() < deadline:
+            if self.desktop_processes() and (service := background_service()) and desktop.ready(service, profile):
+                desktop.remember(service)
+                self.emit(tr("OpenCode 已确认当前 Strata 模型和 strata-charts 图表插件。"))
+                return {"message": tr("Qwen 已就绪，OpenCode 与图表插件已加载。")}
+            time.sleep(0.5)
+        raise ControlError(tr("模型已就绪，但 OpenCode 未确认模型或图表插件。请检查桌面窗口和后台服务。"))
 
     def close(self, force: bool = False, stop_after: bool = False) -> dict:
         targets = self.desktop_processes()
